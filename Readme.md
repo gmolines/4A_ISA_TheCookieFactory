@@ -20,9 +20,9 @@ To run the demonstration, first start the two servers in two different terminals
     mosser@azrael $ cd j2e
     mosser@azrael j2e$ mvn tomee:run
   
-    # .Net terminal						(^C to stop)
+    # .Net terminal						(return to stop)
     mosser@azrael $ cd dotNet
-    mosser@azrael dotNet$ XXX
+    mosser@azrael dotNet$ mono server.exe
     
     # Remote Client						(bye to stop)
     mosser@azrael $ cd client
@@ -36,13 +36,33 @@ _The Cookie Factory_ (TCF) is a major bakery brand in the USA. The _Cookie on De
 
 ### Components assembly
 
+The system is defined as layers:
+
+  * A remote client (green) , that will run on each customer's device;
+  * A J2E kernel (blue), implementing the business logic of the CoD system;
+  * An interoperability layer (grey) between the client and the kernel, implemented as SOAP-based web services;
+  * An external partner (orange, implemented in .Net), communicating with the CoD system through a Web Service.
+
 ![Architecture](https://raw.githubusercontent.com/polytechnice-si/4A_ISA_TheCookieFactory/master/docs/archi.png)
 
 ### Functional interfaces
 
+To deliver the expected features, the coD system defines the following interfaces:
+
+  * [`CartModifier`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/CartModifier.java): operations to handle a given customer's cart, like adding or removing cookies, retrieving the contents of the cart and validating the cart to process the associated order;
+  * [`CustomerFinder`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/CustomerFinder.java): a _finder_ interface to retrieve a customer based on her identifier (here simplified to her name);
+  * [`CustomerRegistration`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/CustomerRegistration.java): operations to handle customer's registration (users profile, ...)
+  * [`CatalogueExploration`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/CatalogueExploration.java): operations to retrieve recipes available for purchase in the CoD;
+  * [`OrderProcessing`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/OrderProcessing.java): process an order (kitchen order lifecycle management);
+  * [`Payment`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/Payment.java): operations related to the payment of a given cart's contents;
+  * [`Tracker`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/Tracker.java): order tracker to retrieve information about the current status of a given order.
+
+
 ![Interfaces](https://raw.githubusercontent.com/polytechnice-si/4A_ISA_TheCookieFactory/master/docs/interfaces.png)
 
 ### Business objects
+
+The business objects are simple: [`Cookies`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/entities/Cookies.java) are defined as an enumerate, binding a name to a price. An [`Item`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/entities/Item.java) models the elements stored inside a cart, _i.e._, a given cookie and the quantity to order. A [`Customer`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/entities/Customer.java) makes orders thanks to the CoD system, and an [`Order`](https://github.com/polytechnice-si/4A_ISA_TheCookieFactory/blob/master/j2e/src/main/java/fr/unice/polytech/isa/tcf/entities/Order.java) stores the set of items effectively ordered by the associated customer (bidirectional association).
 
 ![Business Objects](https://raw.githubusercontent.com/polytechnice-si/4A_ISA_TheCookieFactory/master/docs/business.png)
 
@@ -201,7 +221,7 @@ public abstract class AbstractCartBean implements Cart {
 	}
 
 	/**
-	 * Protected method to update the cart of a given customer, shared by both statefull and stateless beans
+	 * Protected method to update the cart of a given customer, shared by both stateful and stateless beans
 	 */
 	protected Set<Item> updateCart(Customer c, Item item) {
 		Set<Item> items = contents(c);
@@ -383,7 +403,7 @@ public static void main() {
 
 The previously described code works well, but rely on a very string assumption: the service will always be located at the very same location (on localhost). Moreover, the client will load at runtime the WSDL contract, so if one moves the contract elsewhere, the client code does not work anymore. And it is anyway not reasonable to package a distributed application that will only run on localhost. We need to _clean_ our default implementation to be more _aware_ of the server location.
 
-First point, look at the WSDL contract. Even if stored locally as a resource, it refers to a remote file located at [localhost:8080/tcf-backend/webservices/CartWS?wsdl=CartWebService.wsdl](localhost:8080/tcf-backend/webservices/CartWS?wsdl=CartWebService.wsdl). We store this file as a local one, side by side with the initial contract, in a file named `CartWSType.wsdl` (as it basically defines the data types associated to our contract). Then, we edit the `CartWS.wsdl` file to point to this local file instead of the remote one. We should now edit the initialization code to refer to our local file instead of the remote one.
+First point, look at the WSDL contract. Even if stored locally as a resource, it refers to a remote file located at [http://localhost:8080/tcf-backend/webservices/CartWS?wsdl=CartWebService.wsdl](http://localhost:8080/tcf-backend/webservices/CartWS?wsdl=CartWebService.wsdl). We store this file as a local one, side by side with the initial contract, in a file named `CartWSType.wsdl` (as it basically defines the data types associated to our contract). Then, we edit the `CartWS.wsdl` file to point to this local file instead of the remote one (in the `wsdlLocation` attribute). We should now edit the initialization code to refer to our local file instead of the remote one.
 
 ```java
 private static CartWebService initialize() {
@@ -412,33 +432,334 @@ private static CartWebService initialize(String host, String port) {
 }
 ```
 
-## Complete TCF Architecture with Mocked data
+## External Partner
+
+The bank used by TCF to support payments in CoD implements its payment service as a REST one. This service exposes the following resources:
+
+  * `request`, a singleton resource that accept `POST` requests used to post `PaymentRequest`s to the Bank;
+  * `payments`, a list of all payment identifiers available in the system;
+  * `payments/{id}`, the description of a given payment;
+
+__Remark__: Contrarily to the previous service that was _SOAP-based_, this one is _resource-oriented_. The difference between the two paradigm is essential: the previous one exposes __procedures__ (_aka Remote Procedure Call_, RPC), where this one exposes __resources__ (_i.e._, nouns instead of verbs). 
+
+### Implementing a REST service using Mono (.Net)
+
+The Web Service is implemented in the `dotNet/src` directory. The compilation script generates a self-hosted server (in a file named `server.exe`) that starts a web server and binds the requested URIs to the defined operations.
+
+The description of the service interface is straightforward:
+
+```csharp
+[ServiceContract]
+public interface IPaymentService
+{
+  [OperationContract]
+  [WebInvoke( Method = "POST", UriTemplate = "mailbox", RequestFormat = WebMessageFormat.Json, ResponseFormat = WebMessageFormat.Json)]
+  int ReceiveRequest(PaymentRequest request);
+
+  [OperationContract]
+  [WebInvoke( Method = "GET", UriTemplate = "payments/{identifier}", ResponseFormat = WebMessageFormat.Json)]
+  Payment FindPaymentById(int identifier);
+
+  [OperationContract]
+  [WebInvoke( Method = "GET", UriTemplate = "payments", ResponseFormat = WebMessageFormat.Json)]
+  List<int> GetAllPaymentIds();
+}
+```
+
+The implementation is also trivial. We use a map instantiated as an instance variable to implement persistence. It makes the service stateful, which is an anti-pattern and only make sense as we are creating a Proof of Concept. 
+
+To start the service hosting server, simply run `mono server.exe`. Command line parameters can be used to configure the port number for example.
+
+### Invoking a REST service 
+
+As the system relies on simple HTTP requests, one can invoke the PaymentService using any HTTP client, just by specifying the right headers and body for a given request. For example using _cURL_, here are the different commands one can use:
+
+```
+azrael:~ mosser$ REQUEST='{ "CreditCard": "1234-896983", "Amount": 12.09 }'
+azrael:~ mosser$ BASE_URL="http://localhost:9090"
+azrael:~ mosser$ HEADERS='Content-Type: application/json'
+azrael:~ mosser$ curl -i -w "\n" -H "$HEADERS"  -X POST -d "$REQUEST" $BASE_URL/mailbox
+HTTP/1.1 200 
+Content-Type: application/json; charset=utf-8
+Server: Mono-HTTPAPI/1.0
+Date: Thu, 25 Feb 2016 09:24:41 GMT
+Content-Length: 1
+Keep-Alive: timeout=15,max=100
+
+1
+azrael:~ mosser$ curl -i -w "\n" -H "$HEADERS"  -X GET $BASE_URL/payments
+HTTP/1.1 200 
+Content-Type: application/json; charset=utf-8
+Server: Mono-HTTPAPI/1.0
+Date: Thu, 25 Feb 2016 13:24:15 GMT
+Content-Length: 7
+Keep-Alive: timeout=15,max=100
+
+[1,2,3]
+azrael:~ mosser$ curl -i -w "\n" -H "$HEADERS"  -X GET $BASE_URL/payments/1
+HTTP/1.1 200 
+Content-Type: application/json; charset=utf-8
+Server: Mono-HTTPAPI/1.0
+Date: Thu, 25 Feb 2016 13:24:29 GMT
+Content-Length: 100
+Keep-Alive: timeout=15,max=100
+
+{"Amount":12.09,"CreditCard":"1234-896983","Date":"25\/02\/2016 10:24:41","Identifier":0,"Status":0}
+azrael:~ mosser$
+```
+
+### Invoking a REST service from Java
+
+The J2E system consumes the Bank service. As a consequence, our EJBs will act as _clients_ of this service. We rely on the _Apache CXF_ library to consume REST web services. We implement the methods that support the communication with the service in a utility class named `BankAPI`:
+
+```java
+private Integer pay(JSONObject body) {
+	String str = client().path("/mailbox")
+			.accept(MediaType.APPLICATION_JSON_TYPE)
+			.header("Content-Type", MediaType.APPLICATION_JSON)
+			.post(body.toString(), String.class);
+	return Integer.parseInt(str);
+}
+
+private JSONObject getPaymentStatus(Integer id) {
+	String response = client().path("/payments/" + id).get(String.class);
+	JSONObject payment = new JSONObject(response);
+	return payment;
+}
+
+private boolean isValid(JSONObject payment) {
+	return (payment.getInt("Status") == 0);
+}
+```
+
+### Configuring the Bank endpoint
+
+The `CashierBean` class uses an instance of the `BankAPI` class to interact with the remote bank service. The endpoint cannot be hardcoded in its source code. As a consequence, we define a `bank.properties` file in the `resources` directory, which will defined the hostname and port number to be used when interacting with the Bank. In the `CashierBean`, we use a `@PostConstruct` annotation to load these properties from the resource file after the bean initialization:
+
+```java
+@PostConstruct
+private void initializeRestPartnership() throws IOException {
+	Properties prop = new Properties();
+	prop.load(this.getClass().getResourceAsStream("/bank.properties"));
+	bank = new BankAPI(	prop.getProperty("bankHostName"),
+							prop.getProperty("bankPortNumber"));
+}
+```
+
+### Testing the system: Unit vs Integration tests
+
+We are now facing an important issue: the J2E kernel is strongly coupled to the .Net system. One need to start the .Net server to make the J2E system available for tests purpose. To isolate the two systems for tests purpose, we need to _mock_ the BankAPI instead of using the real one.
+
+```java
+@Before
+public void setUpContext() {
+	memory.flush();
+	items = new HashSet<>();
+	items.add(new Item(Cookies.CHOCOLALALA, 3));
+	items.add(new Item(Cookies.DARK_TEMPTATION, 2));
+	// Customers
+	john = new Customer("john", "1234-896983");  // ends with the secret YES Card number
+	pat  = new Customer("pat", "1234-567890");   // should be rejected by the payment service
+	// Mocking the external partner
+	BankAPI mocked = mock(BankAPI.class);
+	cashier.useBankReference(mocked);
+	when(mocked.performPayment(eq(john), anyDouble())).thenReturn(true);
+	when(mocked.performPayment(eq(pat),  anyDouble())).thenReturn(false);
+}
+```
+But we also need to implement _Integration Tests_, that will ensure the end to end connection between our two systems. We rely on Maven to implement such a behavior: 
+
+  - classical Unit tests are always run (_e.g., when invoking `mvn package`)
+  - Integration tests will be run during the `integration-test` phase.
+
+We will differentiate classical tests and integration ones using a file name prefix: integration tests will match `*IntegrationTest`. In the `pom.xml` file we rely on the following configuration to implement these specifications:
+
+```xml
+<plugin>
+	<groupId>org.apache.maven.plugins</groupId>
+	<artifactId>maven-surefire-plugin</artifactId>
+	<version>2.17</version>
+	<configuration>
+		<reuseForks>false</reuseForks>
+		<excludes>
+			<exclude>**/*IntegrationTest.java</exclude>
+		</excludes>
+	</configuration>
+	<executions>
+		<execution>
+			<id>integration-test</id>
+			<goals>
+				<goal>test</goal>
+			</goals>
+			<phase>integration-test</phase>
+			<configuration>
+				<excludes>
+					<exclude>**/*Test.java</exclude>
+				</excludes>
+				<includes>
+					<include>**/*IntegrationTest.java</include>
+				</includes>
+			</configuration>
+		</execution>
+	</executions>
+</plugin>
+``` 
 
 
+## Complete TCF Architecture with Volatile data
 
-### Implementing the components
+__Note__: To checkout this version, be sure that you are browsing the code stored in the `volatile` branch.
 
-### Web service exposition
+Interfaces are defined in the main package, as classical Java interfaces. Components are implemented in the `components` sub-package, in classes with `Bean` postfixed names. When a component refers to another one according to a _provides/requires_ association, the component implementation refers to the associated Interface instead of the concrete implementation to ensure decoupling.
 
-## Persistent entities
+![Architecture Implementation](https://raw.githubusercontent.com/polytechnice-si/4A_ISA_TheCookieFactory/master/docs/archi_impl.png)
 
-### Scalar entities
+The `Cart` component is implemented twice, first as a `Stateful` bean, and then as a `Stateless` one (in the `cart` sub-package). 
 
-### Composite entities
+![Architecture Implementation](https://raw.githubusercontent.com/polytechnice-si/4A_ISA_TheCookieFactory/master/docs/archi_cart.png) 
 
-### Querying the persistent objects
-
-## External partner
-
-### Implementing a .Net web service using Mono
-
-### Invoking a web service within a J2E component
+As there is no persistent backend, we mocked the persistence layer using a `Singleton` bean named `Database`. It stores all the necessary data in static maps. We'll se in the next section how to remove this mock and use a real persistence layer thanks to EJB Entities.
 
 ## Interceptors
 
-### Aspect-oriented programing concepts
+Interceptors are used inside the application server to process the messages exchanged between the different components. But the EJB framework also allows one to develop business-oriented interceptors as a support for cross-cutting features that does not fit easily inside components (e.g., code duplication).
 
 ### Counting the number of processed carts
 
-## Summary
+For statistical purpose, TCF wants to count the number if processed carts. Each time the `validate` operation is invoked on a `Cart`, a counter will be incremented is the cart processing process went well.
+
+One can implement this feature directly inside the `validate` method. However, it will pollute the business-orientation if this implementation with a very technical concern. Thus, we decide to implement this feature as an interception. The interceptor will be located _around_ the _invocation_ of `validate`, and will implement the following algorithm: (i) proceed to your normal behavior, (ii) if it does not throw any exception, increment the statistics counter in the database.
+
+```java
+public class CartCounter implements Serializable {
+
+	@EJB private Database memory;
+
+	@AroundInvoke
+	public Object intercept(InvocationContext ctx) throws Exception {
+		Object result = ctx.proceed();  // do what you're supposed to do
+		memory.incrementCarts();
+		System.out.println("  #Cart processed: " + memory.howManyCarts());
+		return result;
+	}
+
+}
+```
+
+To put the interceptor around our business code, we only need to annotate the expected method:
+
+```java
+@Override
+@Interceptors({CartCounter.class})
+public String validate(Customer c) throws PaymentException {
+	return cashier.payOrder(c, contents(c));
+}
+```
+
+One can put multiple interceptors on the very same method, they will be executed in sequence from left to right. If the bean is stateful, the interceptor must be passivation-compliant, _i.e._, implement the Serializable interface.
+
+### Fault detection
+
+Another interesting usage of interceptors is to implement fault detection. For example, adding or removing to a given cart an `Item` with a negative or null amount of cookies does not make any sense. We can then intercept the invocation of the `CartWebService` operations and check the `item` parameter:
+
+```java
+public class ItemVerifier {
+	@AroundInvoke
+	public Object intercept(InvocationContext ctx) throws Exception {
+		Item it = (Item) ctx.getParameters()[1];
+		if (it.getQuantity() <= 0) {
+			throw new RuntimeException("Inconsistent quantity!");
+		}
+		return ctx.proceed();
+	}
+}
+```
+
+In the `CartWebService` interface description, we annotate the `add` and `remove` operations to declare the interception.
+
+```java
+@WebMethod
+@Interceptors({ItemVerifier.class})
+void addItemToCustomerCart(@WebParam(name = "customer_name") String customerName,
+						   @WebParam(name = "item") Item it)
+		throws UnknownCustomerException;
+
+@WebMethod
+@Interceptors({ItemVerifier.class})
+void removeItemToCustomerCart(@WebParam(name = "customer_name") String customerName,
+							  @WebParam(name = "item") Item it)
+		throws UnknownCustomerException;
+```
+
+__Remark__: The invocation context can be modified by an interceptor, _e.g._, parameters can be modified.
+
+### Using non-invasive interceptions
+
+We consider here a _tracer_ that will log each operation invoked inside the system. This logger is very simple to implement.
+
+```java
+public class Logger implements Serializable {
+
+	@AroundInvoke
+	public Object methodLogger(InvocationContext ctx) throws Exception {
+		String id = ctx.getTarget().getClass().getSimpleName() + "::" + ctx.getMethod().getName();
+		System.out.println("*** Logger intercepts " + id);
+		try {
+			return ctx.proceed();
+		} finally {
+			System.out.println("*** End of interception for " + id);
+		}
+	}
+}
+```
+
+It does not make any sense to manually annotate all the operations designed inside our system. In a file named `ejb-jar.xml` (in the `resources` directory), we simply define a regular expression associated to this very interceptor. The container will map the interceptor to any bean that match the given regular expression. In our case, we want to catch _all_ the method, and the regular expression is quite simple: `*`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ejb-jar PUBLIC '-//Sun Microsystems, Inc.//DTD Enterprise JavaBeans2.0//EN' 'http://java.sun.com/dtd/ejb-jar_2_0.dtd'>
+<ejb-jar>
+    <assembly-descriptor>
+        <interceptor-binding>
+            <ejb-name>*</ejb-name>
+            <interceptor-class>fr.unice.polytech.isa.tcf.interceptors.Logger</interceptor-class>
+        </interceptor-binding>
+    </assembly-descriptor>
+</ejb-jar>
+```
+
+
+## Implementing the persistence layer
+
+### Scalar entities & Composite entities
+
+### Configuring a datasource
+
+### Transactions
+
+### Querying the persistent objects
+
+
+## Conclusions
+
+### Summary
+
+This reference implementation demonstrates the following points with respect to the Introduction to Software Architecture course objectives:
+
+  - Modeling a component-based architecture focused on offered and required functional interfaces;
+  - Implementing such components using (stateless) EJB Sessions with J2E;
+  - Using SOAP-based Web Services as an interoperable layer to integrate heterogeneous technologies through _Remote Procedure Call_ (RPC): `remote client <--> J2E`;
+  - Using REST-based Web Services as an interoperable layer to integrate heterogeneous technologies through _Resource exposition_: `J2E <--> .Net`;
+  - Consuming web services (SOAP & Rest) from remote clients (B2C or B2B);
+  - Using EJB entities to support the implementation of a persistence layer;
+  - Using interceptors to work at the message (_invocation context_) level;
+  - Differentiating Unit tests and Integration tests using Maven.
   
+### Perspectives
+
+  - Use "real" application servers to support TCF deployment (Tomcat, IIS)
+    - See the DevOps course contents
+  - Use a "real" database server (_e.g._ postgres, MySQL)
+    - See the DevOps course contents 
+  - Use an _Enterprise Service Bus_ (ESB) to decouple the J2E system from the .Net one
+    - Consider to attend the _Service Integration_ course next year (id: SOA-1). 
